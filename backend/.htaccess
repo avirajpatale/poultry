@@ -1,0 +1,10 @@
+# Route every request that isn't a real file to the front controller.
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+
+# Never serve config files directly
+<FilesMatch "^(config\.php|database\.php)$">
+    Require all denied
+</FilesMatch>
