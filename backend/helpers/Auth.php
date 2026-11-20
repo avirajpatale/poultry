@@ -10,6 +10,64 @@ class Auth
         return $_SESSION['user'] ?? null;
     }
 
+    /** Read `Authorization: Bearer <token>` from any SAPI (Apache/nginx/built-in). */
+    private static function bearerToken(): ?string
+    {
+        $h = $_SERVER['HTTP_AUTHORIZATION']
+            ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION']
+            ?? (function_exists('getallheaders') ? (getallheaders()['Authorization'] ?? getallheaders()['authorization'] ?? null) : null);
+        if ($h && preg_match('/^Bearer\s+([a-f0-9]{64})$/i', trim($h), $m)) {
+            return strtolower($m[1]);
+        }
+        return null;
+    }
+
+    /**
+     * Issue a long-lived API token for the Android app (Capacitor WebView
+     * can't rely on cross-site session cookies). Stored hashed; the plain
+     * token is returned once to the client.
+     */
+    public static function issueToken(int $userId): string
+    {
+        $token = bin2hex(random_bytes(32));
+        $pdo = Database::pdo();
+        $pdo->prepare('DELETE FROM api_tokens WHERE user_id = ? AND expires_at < NOW()')->execute([$userId]);
+        $pdo->prepare('INSERT INTO api_tokens (user_id, token_hash, expires_at)
+                       VALUES (?,?, DATE_ADD(NOW(), INTERVAL 90 DAY))')
+            ->execute([$userId, hash('sha256', $token)]);
+        return $token;
+    }
+
+    /** Resolve a Bearer token to the same user shape session login produces. */
+    private static function bearerUser(): ?array
+    {
+        $token = self::bearerToken();
+        if (!$token) return null;
+
+        $st = Database::pdo()->prepare(
+            'SELECT u.*, r.name AS role_name FROM api_tokens t
+             JOIN users u ON u.id = t.user_id
+             JOIN roles r ON r.id = u.role_id
+             WHERE t.token_hash = ? AND t.expires_at > NOW() LIMIT 1');
+        $st->execute([hash('sha256', $token)]);
+        $user = $st->fetch();
+        if (!$user) return null;
+
+        $perm = Database::pdo()->prepare(
+            'SELECT p.code FROM role_permissions rp
+             JOIN permissions p ON p.id = rp.permission_id WHERE rp.role_id = ?');
+        $perm->execute([$user['role_id']]);
+
+        return [
+            'id'          => (int)$user['id'],
+            'name'        => $user['name'],
+            'username'    => $user['username'],
+            'role'        => $user['role_name'],
+            'role_id'     => (int)$user['role_id'],
+            'permissions' => array_column($perm->fetchAll(), 'code'),
+        ];
+    }
+
     public static function id(): ?int
     {
         return isset($_SESSION['user']['id']) ? (int)$_SESSION['user']['id'] : null;
@@ -30,6 +88,11 @@ class Auth
 
     public static function logout(): void
     {
+        // Revoke the app token too, if this request carried one.
+        if ($t = self::bearerToken()) {
+            Database::pdo()->prepare('DELETE FROM api_tokens WHERE token_hash = ?')
+                ->execute([hash('sha256', $t)]);
+        }
         $_SESSION = [];
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
@@ -41,6 +104,9 @@ class Auth
     public static function check(): void
     {
         $u = self::user();
+        if (!$u && ($u = self::bearerUser())) {
+            $_SESSION['user'] = $u;   // token auth — same request shape as session
+        }
         if (!$u) {
             throw new ApiException('Unauthenticated', 401);
         }

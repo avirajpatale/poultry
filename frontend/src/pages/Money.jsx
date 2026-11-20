@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { today, monthStart, money } from '../utils/format'
 
 const EMPTY = { txn_date: today(), type: 'expense', category: '', description: '', amount: '', payment_mode: 'cash' }
+const CREDIT_EMPTY = { txn_date: today(), person: '', direction: 'they_owe_me', amount: '', note: '' }
 
 // map backend category names -> i18n keys
 const CAT_KEY = {
@@ -26,6 +27,32 @@ export default function Money() {
   const [filters, setFilters] = useState({ from: monthStart(), to: today(), type: '', page: 1 })
   const [data, setData] = useState({ items: [], income: 0, expense: 0, balance: 0, total: 0, page: 1, per_page: 20 })
   const [toDelete, setToDelete] = useState(null)
+  const [credit, setCredit] = useState({ items: [], summary: [] })
+  const [cForm, setCForm] = useState(CREDIT_EMPTY)
+
+  const loadCredit = useCallback(() => {
+    get('/credit').then(setCredit).catch(() => {})
+  }, [])
+  useEffect(() => { loadCredit() }, [loadCredit])
+
+  const cset = (k) => (e) => setCForm({ ...cForm, [k]: e.target.value })
+
+  const saveCredit = async () => {
+    if (!cForm.person.trim() || !cForm.amount || Number(cForm.amount) <= 0)
+      return toast.error(t('cr_required'))
+    try {
+      await post('/credit', cForm)
+      toast.success(t('cr_saved')); setCForm(CREDIT_EMPTY); loadCredit()
+    } catch (e) { toast.error(e.message) }
+  }
+  const settleCredit = async (r, v) => {
+    try { await put(`/credit/${r.id}`, { settled: v }); loadCredit() }
+    catch (e) { toast.error(e.message) }
+  }
+  const delCredit = async (r) => {
+    try { await del(`/credit/${r.id}`); loadCredit() }
+    catch (e) { toast.error(e.message) }
+  }
 
   const load = useCallback(async () => {
     try { setData(await get('/money', { ...filters, per_page: 20 })) }
@@ -127,7 +154,7 @@ export default function Money() {
       </div>
 
       {/* totals */}
-      <div className="row g-3 mb-3">
+      <div className="row g-3 mb-3 money-totals">
         <div className="col-4"><div className="big-card">
           <div className="big-label">{t('mr_income')}</div>
           <div className="big-num" style={{ color: '#2e7d32', fontSize: '1.4rem' }}>{money(data.income)}</div>
@@ -201,6 +228,80 @@ export default function Money() {
           </div>
         )}
       </div>
+
+      {/* उधारी / credit register */}
+      <details className="content-card mt-3" open={credit.summary.length > 0}>
+        <summary className="card-header py-2 px-3 fw-semibold" style={{ cursor: 'pointer', listStyle: 'none' }}>
+          <i className="bi bi-journal-bookmark me-1" /> {t('cr_title')}
+          {credit.summary.length > 0 && <span className="badge-soft badge-credit ms-2">{credit.summary.length}</span>}
+        </summary>
+        <div className="p-3 border-bottom">
+          <div className="row g-2 align-items-end">
+            <div className="col-6 col-md-2">
+              <label className="form-label small mb-1">{t('date')}</label>
+              <input type="date" className="form-control" value={cForm.txn_date} onChange={cset('txn_date')} />
+            </div>
+            <div className="col-6 col-md-3">
+              <label className="form-label small mb-1">{t('cr_person')} *</label>
+              <input className="form-control" value={cForm.person} onChange={cset('person')} />
+            </div>
+            <div className="col-12 col-md-3">
+              <div className="btn-group w-100">
+                <button type="button" onClick={() => setCForm({ ...cForm, direction: 'they_owe_me' })}
+                  className={`btn ${cForm.direction === 'they_owe_me' ? 'btn-success' : 'btn-outline-secondary'}`}>
+                  {t('cr_they')}</button>
+                <button type="button" onClick={() => setCForm({ ...cForm, direction: 'i_owe_them' })}
+                  className={`btn ${cForm.direction === 'i_owe_them' ? 'btn-danger' : 'btn-outline-secondary'}`}>
+                  {t('cr_i_owe')}</button>
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <label className="form-label small mb-1">{t('amount')} *</label>
+              <input type="number" min="0" step="0.01" inputMode="decimal" className="form-control"
+                value={cForm.amount} onChange={cset('amount')} />
+            </div>
+            <div className="col-6 col-md-2">
+              <button className="btn btn-primary w-100" onClick={saveCredit}>{t('add')}</button>
+            </div>
+          </div>
+        </div>
+        {credit.summary.length > 0 && (
+          <div className="px-3 pt-2 d-flex flex-wrap gap-2">
+            {credit.summary.map((s) => (
+              <span key={s.person} className={`badge-soft ${Number(s.net) > 0 ? 'badge-paid' : 'badge-credit'}`}>
+                {s.person}: {Number(s.net) > 0 ? t('cr_owes_me', { a: money(s.net) }) : t('cr_i_owes', { a: money(Math.abs(s.net)) })}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="table-responsive">
+          <table className="table table-hover mb-0 tbl-cards">
+            <tbody>
+              {credit.items.filter((r) => !Number(r.settled)).slice(0, 20).map((r) => (
+                <tr key={r.id}>
+                  <td data-label={t('date')}>{r.txn_date}</td>
+                  <td data-label={t('cr_person')} className="fw-semibold">{r.person}</td>
+                  <td data-label={t('type_lbl')}>
+                    <span className={`badge-soft ${r.direction === 'they_owe_me' ? 'badge-paid' : 'badge-credit'}`}>
+                      {t(r.direction === 'they_owe_me' ? 'cr_they' : 'cr_i_owe')}
+                    </span>
+                  </td>
+                  <td data-label={t('amount')} className="text-end fw-semibold">{money(r.amount)}</td>
+                  <td data-label="" className="text-end">
+                    <div className="btn-group btn-group-sm">
+                      <button className="btn btn-outline-success" title={t('cr_settle')}
+                        onClick={() => settleCredit(r, 1)}><i className="bi bi-check-lg" /></button>
+                      <button className="btn btn-outline-danger" onClick={() => delCredit(r)}><i className="bi bi-trash" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {credit.items.filter((r) => !Number(r.settled)).length === 0 &&
+                <tr><td><div className="empty-state">{t('cr_none')}</div></td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </details>
 
       <ConfirmDialog open={!!toDelete} title={t('del')}
         message={t('mn_del_q', { a: money(toDelete?.amount) })}

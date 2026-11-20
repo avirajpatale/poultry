@@ -38,7 +38,7 @@ class AuthController
         Database::pdo()->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')
             ->execute([$user['id']]);
 
-        return ['user' => Auth::user()];
+        return ['user' => Auth::user(), 'token' => Auth::issueToken((int)$user['id'])];
     }
 
     /**
@@ -85,7 +85,7 @@ class AuthController
         $user['permissions'] = array_column($perm->fetchAll(), 'code');
 
         Auth::login($user);
-        return ['user' => Auth::user()];
+        return ['user' => Auth::user(), 'token' => Auth::issueToken($userId)];
     }
 
     /**

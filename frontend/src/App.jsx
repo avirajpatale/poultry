@@ -14,6 +14,7 @@ import MonthlyReport from './pages/MonthlyReport'
 import Money from './pages/Money'
 import Materials from './pages/Materials'
 import Users from './pages/Users'
+import Backup from './pages/Backup'
 
 function Protected({ children }) {
   const { user, loading } = useAuth()
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="/money" element={<Money />} />
               <Route path="/materials" element={<Materials />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/backup" element={<Backup />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
