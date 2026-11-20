@@ -25,7 +25,7 @@ export default function Register() {
 
   return (
     <div className="d-flex align-items-center justify-content-center min-vh-100 py-4 auth-bg">
-      <div className="card border-0 shadow-lg" style={{ width: 400, borderRadius: '1rem' }}>
+      <div className="card border-0 shadow-lg auth-card">
         <div className="card-body p-4">
           <div className="d-flex justify-content-end mb-1"><LangSwitch /></div>
           <div className="text-center mb-4">

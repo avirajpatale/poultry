@@ -41,6 +41,20 @@ return [
     ['PUT',  '/materials/categories/{id}',  [MaterialController::class, 'updateCategory'],   null],
     ['DELETE','/materials/categories/{id}', [MaterialController::class, 'destroyCategory'],  null],
 
+    // ---------- उधारी / credit register ----------
+    ['GET',  '/credit',                     [CreditController::class, 'index'],        null],
+    ['POST', '/credit',                     [CreditController::class, 'store'],        null],
+    ['PUT',  '/credit/{id}',                [CreditController::class, 'update'],       null],
+    ['DELETE','/credit/{id}',               [CreditController::class, 'destroy'],      null],
+
+    // ---------- per-user prefs (reminders) ----------
+    ['GET',  '/prefs',                      [PrefsController::class, 'index'],         null],
+    ['PUT',  '/prefs',                      [PrefsController::class, 'update'],        null],
+
+    // ---------- backup & restore ----------
+    ['GET',  '/backup',                     [BackupController::class, 'export'],       null],
+    ['POST', '/backup/restore',             [BackupController::class, 'restore'],      null],
+
     // ---------- admin: user management ----------
     ['GET',  '/users',                      [UserController::class, 'index'],          'users.manage'],
     ['POST', '/users',                      [UserController::class, 'store'],          'users.manage'],

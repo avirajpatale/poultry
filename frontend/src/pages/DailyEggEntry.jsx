@@ -4,11 +4,12 @@ import { get, post } from '../services/api'
 import { useToast } from '../context/ToastContext'
 import { useLang } from '../i18n.jsx'
 import PageHeader from '../components/PageHeader'
-import { today, num } from '../utils/format'
+import { today, num, money } from '../utils/format'
 
 const EMPTY = {
   record_date: today(), opening_eggs: '', eggs_collected: '',
-  eggs_purchased: '', eggs_sold: '', eggs_damaged: '', notes: '',
+  eggs_purchased: '', eggs_sold: '', egg_rate: '', eggs_damaged: '', notes: '',
+  birds_count: '', mortality: '', feed_used_kg: '',
 }
 
 export default function DailyEggEntry() {
@@ -30,7 +31,11 @@ export default function DailyEggEntry() {
         eggs_collected: rec.eggs_collected,
         eggs_purchased: rec.eggs_purchased || '',
         eggs_sold: rec.eggs_sold || '',
+        egg_rate: rec.egg_rate ?? '',
         eggs_damaged: rec.eggs_damaged || '',
+        birds_count: rec.birds_count ?? '',
+        mortality: rec.mortality ?? '',
+        feed_used_kg: rec.feed_used_kg ?? '',
         notes: rec.notes || '',
       })
     } catch {
@@ -71,7 +76,11 @@ export default function DailyEggEntry() {
         eggs_collected: n(form.eggs_collected),
         eggs_purchased: n(form.eggs_purchased),
         eggs_sold: n(form.eggs_sold),
+        ...(form.egg_rate === '' ? {} : { egg_rate: n(form.egg_rate) }),
         eggs_damaged: n(form.eggs_damaged),
+        ...(form.birds_count === '' ? {} : { birds_count: n(form.birds_count) }),
+        ...(form.mortality === '' ? {} : { mortality: n(form.mortality) }),
+        ...(form.feed_used_kg === '' ? {} : { feed_used_kg: n(form.feed_used_kg) }),
         notes: form.notes,
       })
       toast.success(t('ee_saved'))
@@ -115,10 +124,40 @@ export default function DailyEggEntry() {
             value={form.eggs_sold} onChange={set('eggs_sold')} />
         </div>
         <div className="mb-3">
+          <label className="form-label">{t('ee_rate')}</label>
+          <input type="number" min="0" step="0.05" inputMode="decimal" className="form-control form-control-lg"
+            value={form.egg_rate} onChange={set('egg_rate')} placeholder="5.50" />
+          {n(form.eggs_sold) > 0 && n(form.egg_rate) > 0 && (
+            <div className="form-text text-success fw-semibold">
+              {t('ee_expected')}: {money(n(form.eggs_sold) * n(form.egg_rate))} — {t('ee_auto_income')}
+            </div>
+          )}
+        </div>
+        <div className="mb-3">
           <label className="form-label">{t('ee_damaged')}</label>
           <input type="number" min="0" inputMode="numeric" className="form-control form-control-lg"
             value={form.eggs_damaged} onChange={set('eggs_damaged')} />
         </div>
+        <details className="mb-3">
+          <summary className="text-muted" style={{ cursor: 'pointer' }}>{t('ee_more')}</summary>
+          <div className="row g-2 mt-1">
+            <div className="col-4">
+              <label className="form-label small">{t('ee_birds')}</label>
+              <input type="number" min="0" inputMode="numeric" className="form-control"
+                value={form.birds_count} onChange={set('birds_count')} />
+            </div>
+            <div className="col-4">
+              <label className="form-label small">{t('ee_mortality')}</label>
+              <input type="number" min="0" inputMode="numeric" className="form-control"
+                value={form.mortality} onChange={set('mortality')} />
+            </div>
+            <div className="col-4">
+              <label className="form-label small">{t('ee_feed')}</label>
+              <input type="number" min="0" step="0.5" inputMode="decimal" className="form-control"
+                value={form.feed_used_kg} onChange={set('feed_used_kg')} />
+            </div>
+          </div>
+        </details>
         <div className="mb-3">
           <label className="form-label">{t('notes')}</label>
           <input className="form-control" value={form.notes} onChange={set('notes')} />

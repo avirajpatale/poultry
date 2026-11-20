@@ -23,7 +23,7 @@ export default function ResetPassword() {
 
   return (
     <div className="d-flex align-items-center justify-content-center vh-100 auth-bg">
-      <div className="card border-0 shadow-lg" style={{ width: 380, borderRadius: '1rem' }}>
+      <div className="card border-0 shadow-lg auth-card">
         <div className="card-body p-4">
           <div className="d-flex justify-content-end mb-1"><LangSwitch /></div>
           <div className="text-center mb-4">

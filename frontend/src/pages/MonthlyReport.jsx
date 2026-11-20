@@ -8,6 +8,7 @@ const now = new Date()
 
 export default function MonthlyReport() {
   const { t, lang } = useLang()
+  const [view, setView] = useState('month')          // 'month' | 'year'
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [rows, setRows] = useState([])
@@ -18,14 +19,17 @@ export default function MonthlyReport() {
   const monthName = (m, y) =>
     new Date(y, m - 1, 1).toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN',
       { month: 'long', year: 'numeric' })
+  const shortMonth = (m) =>
+    new Date(2024, m - 1, 1).toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN', { month: 'short' })
 
   const load = useCallback(async () => {
     setLoading(true)
-    const from = `${year}-${String(month).padStart(2, '0')}-01`
-    const to = new Date(year, month, 0).toISOString().slice(0, 10)
+    const from = view === 'year' ? `${year}-01-01` : `${year}-${String(month).padStart(2, '0')}-01`
+    const to = view === 'year' ? `${year}-12-31`
+      : new Date(year, month, 0).toISOString().slice(0, 10)
     try {
       const [eggs, mn, mt] = await Promise.all([
-        get('/layers/records', { from, to, per_page: 40 }),
+        get('/layers/records', { from, to, per_page: 400 }),
         get('/money', { from, to, per_page: 1 }),
         get('/materials', { from, to, per_page: 1 }).catch(() => ({ summary: [], grand_total: 0 })),
       ])
@@ -34,12 +38,25 @@ export default function MonthlyReport() {
       setMats({ summary: mt.summary || [], grand_total: mt.grand_total || 0 })
     } catch { setRows([]) }
     setLoading(false)
-  }, [month, year])
+  }, [view, month, year])
 
   useEffect(() => { load() }, [load])
 
   const sum = (k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0)
   const endStock = rows.length ? rows[rows.length - 1].closing_eggs : 0
+
+  // year mode: one line per calendar month with that month's last closing
+  const monthRows = view !== 'year' ? [] : Array.from({ length: 12 }, (_, i) => {
+    const rs = rows.filter((r) => Number(r.record_date.slice(5, 7)) === i + 1)
+    if (!rs.length) return null
+    const s = (k) => rs.reduce((a, r) => a + Number(r[k] || 0), 0)
+    return {
+      label: shortMonth(i + 1),
+      produced: s('eggs_collected'), received: s('eggs_purchased'),
+      sold: s('eggs_sold'), damaged: s('eggs_damaged'),
+      closing: rs[rs.length - 1].closing_eggs,
+    }
+  }).filter(Boolean)
   const totalExpense = moneySum.expense + mats.grand_total   // incl. raw materials
   const net = moneySum.income - totalExpense
 
@@ -60,22 +77,33 @@ export default function MonthlyReport() {
 
   return (
     <div className="mx-auto" style={{ maxWidth: 900 }}>
-      <PageHeader title={t('mr_title')} subtitle={monthName(month, year)}
+      <PageHeader title={view === 'year' ? t('yr_title') : t('mr_title')}
+        subtitle={view === 'year' ? String(year) : monthName(month, year)}
         actions={<button className="btn btn-outline-primary no-print" onClick={() => window.print()}>
           <i className="bi bi-printer" /> {t('mr_print')}</button>} />
 
       <div className="content-card p-3 mb-3 no-print">
-        <div className="row g-2">
-          <div className="col-6 col-md-3">
-            <label className="form-label mb-1">{t('mr_month')}</label>
-            <select className="form-select form-select-lg" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {new Date(2024, m - 1, 1).toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN', { month: 'long' })}
-                </option>
-              ))}
-            </select>
+        <div className="row g-2 align-items-end">
+          <div className="col-12 col-md-3">
+            <div className="btn-group w-100" role="group">
+              <button type="button" className={`btn btn-lg ${view === 'month' ? 'btn-success' : 'btn-outline-secondary'}`}
+                onClick={() => setView('month')}>{t('mr_month')}</button>
+              <button type="button" className={`btn btn-lg ${view === 'year' ? 'btn-success' : 'btn-outline-secondary'}`}
+                onClick={() => setView('year')}>{t('mr_year')}</button>
+            </div>
           </div>
+          {view === 'month' && (
+            <div className="col-6 col-md-3">
+              <label className="form-label mb-1">{t('mr_month')}</label>
+              <select className="form-select form-select-lg" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+                {months.map((m) => (
+                  <option key={m} value={m}>
+                    {new Date(2024, m - 1, 1).toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN', { month: 'long' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="col-6 col-md-3">
             <label className="form-label mb-1">{t('mr_year')}</label>
             <select className="form-select form-select-lg" value={year} onChange={(e) => setYear(Number(e.target.value))}>
@@ -88,7 +116,9 @@ export default function MonthlyReport() {
       {loading && <div className="text-center py-4"><div className="spinner-border text-success" /></div>}
 
       {!loading && <>
-        <h5 className="d-none d-print-block">{monthName(month, year)} — {t('mr_title')}</h5>
+        <h5 className="d-none d-print-block">
+          {view === 'year' ? `${year} — ${t('yr_title')}` : `${monthName(month, year)} — ${t('mr_title')}`}
+        </h5>
         <div className="row g-3 mb-3">
           {cards.map(([l, v, c]) => (
             <div className="col-6 col-md-3" key={l}>
@@ -106,14 +136,25 @@ export default function MonthlyReport() {
             <table className="table table-hover mb-0 tbl-cards">
               <thead>
                 <tr>
-                  <th>{t('date')}</th><th className="text-end">{t('col_start')}</th>
+                  <th>{view === 'year' ? t('mr_month') : t('date')}</th>
+                  {view === 'month' && <th className="text-end">{t('col_start')}</th>}
                   <th className="text-end">{t('ee_produced')}</th><th className="text-end">{t('ee_received')}</th>
                   <th className="text-end">{t('ee_sold')}</th><th className="text-end">{t('ee_damaged')}</th>
                   <th className="text-end">{t('ee_closing')}</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {view === 'year' && monthRows.map((r) => (
+                  <tr key={r.label}>
+                    <td data-label={t('mr_month')}>{r.label}</td>
+                    <td data-label={t('ee_produced')} className="text-end">{num(r.produced)}</td>
+                    <td data-label={t('ee_received')} className="text-end">{num(r.received)}</td>
+                    <td data-label={t('ee_sold')} className="text-end">{num(r.sold)}</td>
+                    <td data-label={t('ee_damaged')} className="text-end">{num(r.damaged)}</td>
+                    <td data-label={t('ee_closing')} className="text-end fw-semibold">{num(r.closing)}</td>
+                  </tr>
+                ))}
+                {view === 'month' && rows.map((r) => (
                   <tr key={r.id}>
                     <td data-label={t('date')}>{r.record_date}</td>
                     <td data-label={t('col_start')} className="text-end">{num(r.opening_eggs)}</td>
@@ -129,7 +170,7 @@ export default function MonthlyReport() {
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="fw-bold table-light">
-                    <td>{t('total_lbl')}</td><td></td>
+                    <td>{t('total_lbl')}</td>{view === 'month' && <td></td>}
                     <td className="text-end">{num(sum('eggs_collected'))}</td>
                     <td className="text-end">{num(sum('eggs_purchased'))}</td>
                     <td className="text-end">{num(sum('eggs_sold'))}</td>

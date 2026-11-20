@@ -43,13 +43,24 @@ export default function DailyReport() {
   const fmt = (d) => new Date(d + 'T00:00:00').toLocaleDateString(lang === 'mr' ? 'mr-IN' : 'en-IN',
     { weekday: 'short', day: 'numeric', month: 'short' })
 
+  const share = () => {
+    const lines = [
+      `🐔 ${t('dr_title')} — ${fmt(date)}`,
+      ...COLS.slice(1).map(([k, l]) => `${t(l)}: ${num(rec[k])}`),
+      ...(rec.notes ? [`${t('notes')}: ${rec.notes}`] : []),
+    ]
+    const text = lines.join('\n')
+    if (navigator.share) navigator.share({ text }).catch(() => {})
+    else window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
   return (
     <div className="mx-auto" style={{ maxWidth: 900 }}>
       <PageHeader title={t('dr_title')} subtitle={t('dr_view_edit')} />
 
       <div className="content-card p-3 mb-3">
         <div className="row g-2 align-items-end">
-          <div className="col-8 col-md-4">
+          <div className="col-6 col-md-4">
             <label className="form-label mb-1">{t('dr_pick')}</label>
             <input type="date" className="form-control form-control-lg" value={date}
               onChange={(e) => setDate(e.target.value)} />
@@ -61,7 +72,12 @@ export default function DailyReport() {
                   <i className="bi bi-pencil" /> {t('edit')}
                 </Link>
               </div>
-              <div className="col-2 col-md-3">
+              <div className="col-2 col-md-2">
+                <button className="btn btn-outline-success btn-lg w-100" onClick={share}>
+                  <i className="bi bi-whatsapp" /> <span className="d-none d-sm-inline">{t('share')}</span>
+                </button>
+              </div>
+              <div className="col-2 col-md-2">
                 <button className="btn btn-outline-danger btn-lg w-100" onClick={() => setConfirmDel(true)}>
                   <i className="bi bi-trash" /> <span className="d-none d-sm-inline">{t('dr_del')}</span>
                 </button>
@@ -82,6 +98,14 @@ export default function DailyReport() {
                     <td className="fs-5 fw-semibold text-end">{num(rec[k])}</td>
                   </tr>
                 ))}
+                {[['birds_count', 'ee_birds'], ['mortality', 'ee_mortality'], ['feed_used_kg', 'ee_feed']]
+                  .filter(([k]) => rec[k] !== null && rec[k] !== undefined && Number(rec[k]) > 0)
+                  .map(([k, l]) => (
+                    <tr key={k}>
+                      <th className="bg-light">{t(l)}</th>
+                      <td className="text-end">{num(rec[k])}</td>
+                    </tr>
+                  ))}
                 {rec.notes && <tr><th className="bg-light">{t('notes')}</th><td>{rec.notes}</td></tr>}
               </tbody>
             </table>

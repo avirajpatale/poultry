@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useLang, LangSwitch } from '../i18n.jsx'
+import PinLock from '../components/PinLock'
 
 // Exactly 5 menu items — nothing else.
 const NAV = [
@@ -17,6 +18,7 @@ export default function AdminLayout() {
   const { user, logout } = useAuth()
   const { t, lang } = useLang()
   const [open, setOpen] = useState(false)
+  const [unlocked, setUnlocked] = useState(() => !localStorage.getItem('farm_pin'))
   const navigate = useNavigate()
 
   // admin sees one extra menu: user approvals
@@ -28,6 +30,8 @@ export default function AdminLayout() {
     await logout()
     navigate('/login')
   }
+
+  if (!unlocked) return <PinLock onUnlock={() => setUnlocked(true)} />
 
   return (
     <div className="app-shell">

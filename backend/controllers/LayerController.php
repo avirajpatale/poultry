@@ -58,6 +58,10 @@ class LayerController
             'eggs_damaged'   => 'int|min:0',
             'eggs_used'      => 'int|min:0',
             'eggs_sold'      => 'int|min:0',
+            'birds_count'    => 'int|min:0',
+            'mortality'      => 'int|min:0',
+            'feed_used_kg'   => 'numeric|min:0',
+            'egg_rate'       => 'numeric|min:0|max:999',
             'notes'          => 'max:255',
         ]);
 
@@ -91,23 +95,57 @@ class LayerController
                 throw new ApiException("Egg counts invalid — closing stock would be {$closing}", 422);
             }
 
+            // optional farm fields: keep the old value when not sent
+            $opt = function (string $k) use ($d, $old) {
+                return $d[$k] !== null ? $d[$k] : ($old[$k] ?? null);
+            };
+            $birds   = $opt('birds_count');
+            $mort    = $opt('mortality') ?? 0;      // column is NOT NULL DEFAULT 0
+            $feed    = $opt('feed_used_kg') ?? 0;
+            $rate    = $opt('egg_rate');
+
             if ($old) {
                 $db->prepare(
                     'UPDATE layer_daily_records SET opening_eggs=?, eggs_collected=?, eggs_purchased=?,
-                     eggs_sold=?, eggs_damaged=?, eggs_used=?, closing_eggs=?, notes=?
+                     eggs_sold=?, egg_rate=?, eggs_damaged=?, eggs_used=?, closing_eggs=?, birds_count=?,
+                     mortality=?, feed_used_kg=?, notes=?
                      WHERE id=?'
-                )->execute([$opening, $collected, $purchased, $sold, $damaged, $used,
-                            $closing, $d['notes'] ?? null, $old['id']]);
+                )->execute([$opening, $collected, $purchased, $sold, $rate, $damaged, $used,
+                            $closing, $birds, $mort, $feed, $d['notes'] ?? null, $old['id']]);
                 $recordId = (int)$old['id'];
             } else {
                 $db->prepare(
                     'INSERT INTO layer_daily_records
-                     (record_date, opening_eggs, eggs_collected, eggs_purchased, eggs_sold,
-                      eggs_damaged, eggs_used, closing_eggs, notes, created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)'
-                )->execute([$date, $opening, $collected, $purchased, $sold, $damaged, $used,
-                            $closing, $d['notes'] ?? null, $me]);
+                     (record_date, opening_eggs, eggs_collected, eggs_purchased, eggs_sold, egg_rate,
+                      eggs_damaged, eggs_used, closing_eggs, birds_count, mortality,
+                      feed_used_kg, notes, created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                )->execute([$date, $opening, $collected, $purchased, $sold, $rate, $damaged, $used,
+                            $closing, $birds, $mort, $feed, $d['notes'] ?? null, $me]);
                 $recordId = (int)$db->lastInsertId();
+            }
+
+            // Egg-sale income: when a rate is set, keep a matching Money entry
+            // (marked 'auto:egg-sale') so the hisab reflects it without re-typing.
+            $auto = $db->prepare(
+                "SELECT id FROM money_transactions
+                 WHERE created_by = ? AND txn_date = ? AND description = 'auto:egg-sale'");
+            $auto->execute([$me, $date]);
+            $autoId = $auto->fetchColumn();
+            if ($sold > 0 && $rate !== null && (float)$rate > 0) {
+                $amount = round($sold * (float)$rate, 2);
+                if ($autoId) {
+                    $db->prepare('UPDATE money_transactions SET amount=? WHERE id=?')
+                       ->execute([$amount, $autoId]);
+                } else {
+                    $db->prepare(
+                        "INSERT INTO money_transactions
+                         (txn_date, type, category, description, amount, payment_mode, created_by)
+                         VALUES (?,?,?,?,?,?,?)")
+                       ->execute([$date, 'income', 'Egg Sale', 'auto:egg-sale', $amount, 'cash', $me]);
+                }
+            } elseif ($autoId) {
+                $db->prepare('DELETE FROM money_transactions WHERE id=?')->execute([$autoId]);
             }
 
             $this->recascade($date, $me);

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { get, post } from '../services/api'
+import { get, post, setToken } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -16,18 +16,21 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const d = await post('/auth/login', { email, password })
+    setToken(d.token)
     setUser(d.user)
     return d.user
   }
 
   const register = async (payload) => {
     const d = await post('/auth/register', payload)
+    setToken(d.token)
     setUser(d.user)
     return d.user
   }
 
   const logout = async () => {
     try { await post('/auth/logout', {}) } catch { /* session may be gone */ }
+    setToken(null)
     setUser(null)
   }
 

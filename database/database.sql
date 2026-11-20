@@ -518,3 +518,18 @@ INSERT INTO settings (setting_key, setting_value) VALUES
  ('invoice_prefix','INV-'),
  ('egg_tray_size','30'),
  ('low_stock_alert','1');
+
+-- NOTE: after importing this file on a FRESH database, also run the
+-- migrations (in order): money_migration.sql, auth_migration.sql,
+-- owner_migration.sql, materials_migration.sql, token_migration.sql.
+-- api_tokens powers Bearer-token login for the Android app:
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id     INT UNSIGNED NOT NULL,
+    token_hash  CHAR(64) NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at  DATETIME NOT NULL,
+    UNIQUE KEY uq_token (token_hash),
+    INDEX idx_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
